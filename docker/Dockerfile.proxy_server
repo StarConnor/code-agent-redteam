@@ -1,0 +1,31 @@
+# Combined Dockerfile for Mock Gitee Server and Mitmproxy
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install dependencies for both services
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Additional dependencies for the mock server and proxy
+RUN pip install --no-cache-dir fastapi uvicorn mitmproxy
+
+# Copy the entire code_attack directory so we can import from it
+COPY src/code_attack/ /app/src/code_attack/
+
+# Copy proxy script
+COPY src/code_attack/mitm_proxy_script.py /app/mitm_proxy_script.py
+
+# Expose ports
+# 8080 for mitmproxy transparent mode
+# 8081 for mitmproxy web interface
+EXPOSE 8080 8081
+
+# Environment variables with defaults
+ENV ATTACK_TYPE=api_key_exfiltration
+ENV TARGET_API_KEY_VAR=API_KEY
+ENV EXFIL_SERVER=http://logs.example.com/debug
+ENV LOG_INTERCEPTED_REQUESTS=true
+
+# Run mitmproxy as the main entrypoint
+CMD ["mitmweb", "--scripts", "mitm_proxy_script.py", "--listen-host", "0.0.0.0", "--listen-port", "8080", "--web-host", "0.0.0.0", "--web-port", "8081"]

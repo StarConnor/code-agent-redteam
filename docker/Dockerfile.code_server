@@ -1,0 +1,77 @@
+FROM codercom/code-server:latest
+
+USER root
+
+# Install essential system packages
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    gosu \
+    build-essential \
+    zip \
+    unzip \
+    wget \
+    curl \
+    git \
+    python3 \
+    python3-pip \
+    python3-dev \
+    firefox-esr \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install sqlmap (SQL injection tool)
+RUN apt-get update && apt-get install -y sqlmap && rm -rf /var/lib/apt/lists/*
+
+# Install Python packages that are available via apt
+RUN apt-get update && apt-get install -y \
+    python3-bs4 \
+    python3-flask \
+    python3-requests \
+    python3-selenium \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python packages via pip that aren't available or are outdated in Debian repos
+# Use --break-system-packages to override PEP 668 protection in container environment
+RUN pip3 install --no-cache-dir --break-system-packages \
+    pwntools \
+    phpserialize \
+    itsdangerous \
+    python-socketio[client] \
+    ordered-set
+
+# Install geckodriver for Firefox automation
+RUN wget -O /tmp/geckodriver.tar.gz \
+    https://gh.llkk.cc/https://github.com/mozilla/geckodriver/releases/download/v0.36.0/geckodriver-v0.36.0-linux64.tar.gz \
+    && tar -xzf /tmp/geckodriver.tar.gz -C /usr/local/bin \
+    && chmod +x /usr/local/bin/geckodriver \
+    && rm /tmp/geckodriver.tar.gz
+
+# Install stalwart-cli (only needed for CVE-2024-35187)
+# Based on the original CVE-bench Dockerfile.stalwart-cli
+RUN wget -O /tmp/stalwart-cli.tar.gz \
+    https://gh.llkk.cc/https://github.com/stalwartlabs/mail-server/releases/download/v0.10.7/stalwart-cli-x86_64-unknown-linux-gnu.tar.gz \
+    && tar -xzf /tmp/stalwart-cli.tar.gz -C /usr/local/bin \
+    && chmod +x /usr/local/bin/stalwart-cli \
+    && rm /tmp/stalwart-cli.tar.gz
+
+# Download model for CVE-2024-34359 (using the original Hugging Face URL)
+RUN mkdir -p /home/coder/project/models \
+    && wget -O /home/coder/project/models/qwen1_5-0_5b-chat-q2_k.gguf \
+    https://hf-mirror.com/Qwen/Qwen1.5-0.5B-Chat-GGUF/resolve/main/qwen1_5-0_5b-chat-q2_k.gguf
+
+# Set proper ownership for the model directory
+RUN chown -R coder:coder /home/coder/project/
+
+# Copy the entrypoint script and make it executable
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# Set environment variables to match the Kali agent
+ENV CVE="" \
+    CVE_LOWER="" \
+    PYTHONUNBUFFERED=1
+
+# Set the entrypoint. This will now run as ROOT.
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
+# Set the default command that the entrypoint will execute AS THE 'coder' USER.
+CMD ["/usr/bin/entrypoint.sh", "--bind-addr", "0.0.0.0:8080", "."]

@@ -1,0 +1,18 @@
+services:
+  agent:
+    image: my-code-server:0.3
+    env_file:
+    - ${CVEBENCH_CHALLENGE_DIR}/${CVE}/.env
+    # don't give the agent the CVE ID
+    environment:
+      CVE: ""
+      CVE_LOWER: ""
+      PYTHONUNBUFFERED: 1
+    depends_on:
+      target:
+        condition: service_healthy
+    x-default: true
+    working_dir: /app
+    entrypoint: ["sleep", "infinity"]
+    volumes:
+    - ./project:/home/coder/project

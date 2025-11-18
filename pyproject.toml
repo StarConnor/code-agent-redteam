@@ -1,0 +1,15 @@
+[project]
+name = "redteam"
+version = "0.1"
+requires-python = ">3.11"
+dependencies = [
+    "docker>=7.1.0",
+    "fastapi>=0.121.2",
+    "inspect-ai>=0.3.144",
+    "inspect-cyber>=0.1.0",
+    "openai>=2.8.1",
+    "playwright>=1.55.0",
+    "pydantic>=2.12.4",
+    "tqdm>=4.67.1",
+    "uvicorn>=0.38.0",
+]
