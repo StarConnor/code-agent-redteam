@@ -1,14 +1,21 @@
-# 0. Create the environment
+# 0. Clone the repo and submodule
+```bash
+git clone https://github.com/StarConnor/code-agent-redteam.git
+cd code-agent-redteam
+git submodule update --init --recursive
+```
+
+# 1. Create the environment
 ```bash
 uv venv 
 source .venv/bin/activate
 uv sync
 ```
 
-# 1. Build the docker image
+# 2. Build the docker image
 see docker/README.md
 
-# 2. Run the redteam task
+# 3. Run the redteam task
 
 ```bash
 export V3_API_KEY="YOUR_API_KEY"
