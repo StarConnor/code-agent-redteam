@@ -23,3 +23,8 @@ export V3_BASE_URL="https://api.gpt.ge/v1"
 python -m src.redteam_runner --task redcode
 python -m src.redteam_runner --task cvebench
 ```
+
+# 4. Start the backend server
+```bash
+python -m src.new_queue_server
+```
