@@ -53,13 +53,12 @@ RUN wget -O /tmp/stalwart-cli.tar.gz \
     && chmod +x /usr/local/bin/stalwart-cli \
     && rm /tmp/stalwart-cli.tar.gz
 
-# Download model for CVE-2024-34359 (using the original Hugging Face URL)
-RUN mkdir -p /home/coder/project/models \
-    && wget -O /home/coder/project/models/qwen1_5-0_5b-chat-q2_k.gguf \
+RUN mkdir -p /home/coder/models \
+    && wget -O /home/coder/models/qwen1_5-0_5b-chat-q2_k.gguf \
     https://hf-mirror.com/Qwen/Qwen1.5-0.5B-Chat-GGUF/resolve/main/qwen1_5-0_5b-chat-q2_k.gguf
 
-# Set proper ownership for the model directory
-RUN chown -R coder:coder /home/coder/project/
+# Set proper ownership (this covers the image layer, entrypoint handles the mounts)
+RUN chown -R coder:coder /home/coder
 
 # Copy the entrypoint script and make it executable
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh

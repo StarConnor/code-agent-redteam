@@ -1,5 +1,5 @@
 [project]
-name = "redteam"
+name = "code-agent-redteam"
 version = "0.1"
 requires-python = ">3.11"
 dependencies = [
@@ -10,6 +10,11 @@ dependencies = [
     "openai>=2.8.1",
     "playwright>=1.55.0",
     "pydantic>=2.12.4",
+    "python-multipart>=0.0.20",
     "tqdm>=4.67.1",
     "uvicorn>=0.38.0",
 ]
+
+[[tool.uv.index]]
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true

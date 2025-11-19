@@ -10,7 +10,7 @@ from .base import BaseExecutionEnvironment
 
 import docker
 DOCKER_AVAILABLE = True
-from ..utils.others import setup_logging
+from ..utils.others import setup_logging, retry_sync
 LOGGER = setup_logging(__name__)
 
 class DockerExecutionEnvironment(BaseExecutionEnvironment):
@@ -316,28 +316,52 @@ class DockerExecutionEnvironment(BaseExecutionEnvironment):
             raise RuntimeError("Container not running. Call setup() first.")
             
         try:
+            LOGGER.info(f"Attempting to retrieve file '{file_path}' from container")
             # Use the Docker SDK to get file content from container
-            bits, stat = self.container.get_archive(file_path)
+            def get_file_info():
+                return self.container.get_archive(file_path)
+            
+            bits, stat = retry_sync(get_file_info, max_attempts=5, delay=1, backoff=2, exceptions=(Exception,))
+            LOGGER.info(f"Successfully retrieved file info. Stat: {stat}")
+            
+            # Log information about bits
+            bits_list = list(bits)
+            LOGGER.info(f"Bits list has {len(bits_list)} items")
+            if len(bits_list) > 0:
+                LOGGER.info(f"First bits item type: {type(bits_list[0])}, size: {len(bits_list[0]) if hasattr(bits_list[0], '__len__') else 'unknown'}")
             
             # The returned data is a tar archive, we need to extract it
             import tarfile
             import io
             
             # Create a tar file from the returned bytes
-            tar_stream = io.BytesIO(b''.join(bits))
+            tar_stream = io.BytesIO(b''.join(bits_list))
+            LOGGER.info(f"Created tar stream of size: {tar_stream.getbuffer().nbytes} bytes")
             
             # Open and extract the tar file
             with tarfile.open(fileobj=tar_stream) as tar:
-                member = tar.getmembers()[0]  # Get the first (and likely only) file
+                members = tar.getmembers()
+                LOGGER.info(f"Tar file contains {len(members)} members")
+                if not members:
+                    raise RuntimeError(f"No files found in archive for '{file_path}'")
+                    
+                member = members[0]  # Get the first (and likely only) file
+                LOGGER.info(f"Extracting member: {member.name}, size: {member.size} bytes")
                 file_content = tar.extractfile(member).read()
+                LOGGER.info(f"Extracted content of size: {len(file_content)} bytes")
                 
                 # Try to decode as UTF-8 text, fallback to bytes if that fails
                 try:
-                    return file_content.decode('utf-8')
+                    decoded_content = file_content.decode('utf-8')
+                    LOGGER.info("Successfully decoded content as UTF-8")
+                    return decoded_content
                 except UnicodeDecodeError:
-                    return file_content.decode('utf-8', errors='replace')
+                    decoded_content = file_content.decode('utf-8', errors='replace')
+                    LOGGER.warning("Decoded content with error replacement")
+                    return decoded_content
                     
         except Exception as e:
+            LOGGER.error(f"Failed to retrieve file '{file_path}' from container: {e}")
             raise RuntimeError(f"Failed to retrieve file '{file_path}' from container: {e}")
 
 def find_available_port(start_port: int = 8000, max_attempts: int = 100) -> int:

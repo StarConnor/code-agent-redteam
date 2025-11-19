@@ -15,6 +15,9 @@ from .challenges.challenge_tasks import cvebench_task, redcode_task
 from .utils.others import setup_logging
 
 LOGGER = setup_logging(__name__)
+WORKSPACE_PATH = os.path.join(Path(__file__).parent.parent, "temp_workspace")
+CONFIG_PATH = os.path.join(Path(__file__).parent.parent, "configs/.config")
+EXTENSION_PATH = "/home/coder/.config/code-server/cline-3.35.0.vsix"
 
 
 vscode_task = {"cvebench": cvebench_task, "redcode": redcode_task}
@@ -30,6 +33,8 @@ class RedTeamRunner:
         filter_dict: dict = None, 
         port: int = 8081,
         queue: asyncio.Queue = None,
+        use_proxy: bool = True,
+        headless: bool = True,
     ):
         if software == "vscode":
             task = vscode_task
@@ -57,41 +62,14 @@ class RedTeamRunner:
         self.page_url = f"http://localhost:{port}"
         self.queue = queue
         
-        print("--- 🚀 Starting Red Team Evaluation via Python Script ---")
-        # --- 1. Configure your debug session here ---
-        # Instead of using command-line arguments, you can set all parameters directly.
-        # This makes it easy to set breakpoints and debug.
-        
-        # Set to a specific challenge ID to test one scenario, or None to run all
-        # Control the environment setup
-        USE_PROXY_FOR_DEBUG = True
-        
-        # !! CRITICAL FOR DEBUGGING: Set headless=False to watch the browser automation !!
-        RUN_HEADLESS = False
-
-        # Define all required paths directly in your script
-        # Make sure these paths are correct for your local machine
-        WORKSPACE_PATH = "/home/zfk/projects/agent/Agent-S"
-        CONFIG_PATH = "/home/zfk/projects/redteam/configs/.config" # e.g., /home/user/.config
-        EXTENSION_PATH = "/home/coder/.config/code-server/cline-3.35.0.vsix"
-
-        # Set any required environment variables for your agent's API keys
-        # This is better than putting secrets directly in the code.
-        os.environ["AGENT_API_KEY"] = os.environ.get("AGENT_API_KEY", "your-secret-api-key")
-        os.environ["AGENT_BASE_URL"] = os.environ.get("AGENT_BASE_URL", "https://api.gpt.ge/v1")
-
-
-        # --- 2. Create the Task object ---
-        # The @task decorator turned `redteam_agent_task` into a factory function.
-        # Calling it doesn't run the test; it just returns a fully configured Task object.
         print("Creating the inspect-ai Task object with debug settings...")
         self.task_to_run = self.task(
             filter_dict=self.filter_dict,
-            use_proxy=USE_PROXY_FOR_DEBUG,
+            use_proxy=use_proxy,
             workspace=WORKSPACE_PATH,
             config=CONFIG_PATH,
             extension_path=EXTENSION_PATH,
-            headless=RUN_HEADLESS,
+            headless=headless,
             max_turns=3,  # You might want a lower number for faster debug cycles
             model="gpt-4o-mini",
             model_base_url="https://api.gpt.ge/v1",

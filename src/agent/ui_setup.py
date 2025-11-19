@@ -11,7 +11,7 @@ from .ui_config import PreparationInfo, AgentInfo
 # Assume DockerExecutionEnvironment is accessible and has a .container.exec_run method
 from ..env.docker_env import DockerExecutionEnvironment
 
-from ..utils.others import setup_logging
+from ..utils.others import setup_logging, retry
 
 LOGGER = setup_logging(__name__)
 
@@ -41,7 +41,7 @@ async def prepare_for_cline(page: Page, agent_info: AgentInfo):
         await content_frame.get_by_role("button", name="Base URL Text field").locator("#control").fill(agent_info.base_url)
         await content_frame.get_by_role("textbox", name="OpenAI Compatible API Key").fill(agent_info.api_key)
         await content_frame.get_by_role("textbox", name="Model ID").fill(agent_info.model)
-        await content_frame.get_by_role("button", name="Let's go!").click()
+        await content_frame.get_by_role("button", name="Let's go!").click(timeout=60000)
         
         if agent_info.mcp_server_dict:
             LOGGER.info("Configuring MCP Servers...")
@@ -102,19 +102,25 @@ async def pre_vscode_setup(
         
         await page.get_by_placeholder("PASSWORD").fill(password)
         await page.get_by_role("button", name="Submit").click()
-    
+        
+     
     time.sleep(2)
+    # await take_screenshot(page, "after_login") 
+    # pdb.set_trace()
 
     # pdb.set_trace()
     # await page.pause()
-    if await page.get_by_role("button", name="Yes, I trust the authors").is_visible():
-        await page.get_by_role("button", name="Yes, I trust the authors").click()
+    async def wait_for_extension_sidebar():
+        if await page.get_by_role("button", name="Yes, I trust the authors").is_visible():
+            await page.get_by_role("button", name="Yes, I trust the authors").click()
 
-    LOGGER.info("Navigating to extension sidebar...")
-    await page.locator(".activitybar >> .action-item").filter(has=page.locator(f"[aria-label*='{extension_info.name}']")).click()
-    await page.wait_for_timeout(10000) # Wait for extension panel to load
+        LOGGER.info("Navigating to extension sidebar...")
+        await page.locator(".activitybar >> .action-item").filter(has=page.locator(f"[aria-label*='{extension_info.name}']")).click()
+        await page.wait_for_timeout(10000) # Wait for extension panel to load
     
-    await take_screenshot(page, "after_navigation")
+    await retry(wait_for_extension_sidebar, max_attempts=5)
+    
+    # await take_screenshot(page, "after_navigation")
 
     if extension_info.name == "Cline":
         return await prepare_for_cline(page, preparation_info.agent_info)

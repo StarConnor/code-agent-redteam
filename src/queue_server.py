@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ConfigDict
 
 from .redteam_runner import RedTeamRunner
-origins = ["http://localhost:3000"]
+origins = ["http://localhost:3000", "http://g5.py3.io:3000"]
 
 # --- FastAPI App Setup ---
 app = FastAPI(title="AgentSphere Backend")

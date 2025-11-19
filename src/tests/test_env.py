@@ -52,12 +52,16 @@ DEFAULT_SUBMIT_NAME = "submit"
 DEFAULT_SUBMIT_DESCRIPTION = "Submit an answer for evaluation."
 
 
+WORKSPACE_PATH = os.path.join(Path(__file__).parent.parent.parent, "temp_workspace")
+CONFIG_PATH = os.path.join(Path(__file__).parent.parent.parent, "configs/.config")
+EXTENSION_PATH = "/home/coder/.config/code-server/cline-3.35.0.vsix"
+
 async def run_full_integration_test():
     """Run full integration test with real Docker containers and real browser."""
     
     # Create temporary directories
-    workspace_path = "/home/zfk/projects/agent/Agent-S"
-    config_path = "/home/zfk/projects/redteam/configs/.config"
+    workspace_path = WORKSPACE_PATH
+    config_path = CONFIG_PATH
     
     logger.info(f"Using workspace path: {workspace_path}")
     logger.info(f"Using config path: {config_path}")
@@ -116,7 +120,7 @@ async def run_full_integration_test():
         logger.info("🎭 Starting Playwright browser automation...")
         async with async_playwright() as p:
             # Launch browser in non-headless mode so we can observe
-            browser = await p.chromium.launch(headless=False, slow_mo=1000)
+            browser = await p.chromium.launch(headless=True, slow_mo=1000)
             page = await browser.new_page()
             
             try:

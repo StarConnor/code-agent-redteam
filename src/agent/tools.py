@@ -6,11 +6,12 @@ from enum import Enum, auto
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError, expect
 
 from ..utils.others import setup_logging
+from .ui_setup import take_screenshot
 
 LOGGER = setup_logging(__name__)
 
 # Configure logging to write to both console and file
-MAX_ERROR_ATTEMPTS = 20  # Maximum consecutive errors before aborting
+MAX_ERROR_ATTEMPTS = 5  # Maximum consecutive errors before aborting
 
 from ..utils.others import retry
 
@@ -214,12 +215,24 @@ class UIActionObserver:
                 
                 LOGGER.info("HARNESS: Clicked on 'EXPORT' button.")
                 await self.page.get_by_role("textbox", name="Type to narrow down results.").focus()
-                await self.page.keyboard.press("Control+A")
-                await self.page.keyboard.press("Backspace")
-                await self.page.keyboard.type(history_file_path)
+                async def enter_path():
+                    await self.page.keyboard.press("Control+A")
+                    await self.page.keyboard.press("Backspace")
+                    await self.page.keyboard.type(history_file_path)
+                    # value = await self.page.get_by_role("textbox", name="Type to narrow down results.").input_value()
+                    # LOGGER.warning(f"{value=}")
+                    await expect(self.page.get_by_role("textbox", name="Type to narrow down results.")).to_have_value(history_file_path)
+                    # await take_screenshot(self.page, "before_history_path_entered")
+                
+                await retry(enter_path, max_attempts=3, delay=1.0, backoff=2.0)
+
                 await self.page.get_by_role("button", name="OK").click()
+                # await take_screenshot(self.page, "after_history_path_entered")
                 if await self.page.locator("div").filter(has_text="The folder project does not").nth(2).is_visible():
                     await self.page.get_by_role("button", name="OK").click()
+                    # await take_screenshot(self.page, "after_history_path_entered_2")
+                await self.page.get_by_role("tab", name="Explorer (Ctrl+Shift+E)").locator("a").click()
+                # await take_screenshot(self.page, "show_workspace")
                 return history_file_path
             except Exception as e:
                 LOGGER.error(f"HARNESS: Error while retrieving conversation history file path: {e}")

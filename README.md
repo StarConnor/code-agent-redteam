@@ -15,16 +15,17 @@ uv sync
 # 2. Build the docker image
 see docker/README.md
 
-# 3. Run the redteam task
 
+# 3. Start the backend server
 ```bash
 export V3_API_KEY="YOUR_API_KEY"
+python -m src.queue_server
+```
+
+# 4.(Optional) Run the redteam task
+
+```bash
 export V3_BASE_URL="https://api.gpt.ge/v1"
 python -m src.redteam_runner --task redcode
 python -m src.redteam_runner --task cvebench
-```
-
-# 4. Start the backend server
-```bash
-python -m src.new_queue_server
 ```
