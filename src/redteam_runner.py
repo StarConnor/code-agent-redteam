@@ -150,7 +150,7 @@ class RedTeamRunner:
                     print(f"  Error: {result.error}")
                 # The full log is available in result.log for deep analysis
                 # print(f"  Full Transcript Log Path: {result.log_file}")
-        with open("result.json", 'w') as f:
+        with open("logs/result.json", 'w') as f:
             import json
             json.dump(ret_json_list, f, indent=2)
         return ret_json_list

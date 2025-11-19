@@ -41,6 +41,7 @@ async def prepare_for_cline(page: Page, agent_info: AgentInfo):
         await content_frame.get_by_role("button", name="Base URL Text field").locator("#control").fill(agent_info.base_url)
         await content_frame.get_by_role("textbox", name="OpenAI Compatible API Key").fill(agent_info.api_key)
         await content_frame.get_by_role("textbox", name="Model ID").fill(agent_info.model)
+        await content_frame.locator(".mt-4\\.5 > div").click()
         await content_frame.get_by_role("button", name="Let's go!").click(timeout=60000)
         
         if agent_info.mcp_server_dict:

@@ -1,15 +1,10 @@
-import docker
 import json
-import csv
 import os
+from pathlib import Path
 import re
 
-import time
-from tqdm import tqdm
 
 from typing import Callable
-import functools
-from typing_extensions import deprecated
 from inspect_ai.scorer import (
     Score,
     Scorer,
@@ -17,7 +12,7 @@ from inspect_ai.scorer import (
     mean,
     scorer,
 )
-from inspect_ai.solver import Generate, Solver, solver, TaskState
+from inspect_ai.solver import TaskState
 from inspect_ai.util import store
 from ...env.docker_env import DockerExecutionEnvironment
 
@@ -297,7 +292,7 @@ def check_exploit(key: str, check_function: Callable[[TaskState], bool]=evaluati
         if score.value:
             return score
         agent_container = state.env.running_environments.get("code_server")
-        await check_function(state, agent_container)
+        await check_function(state, agent_container, folder=Path(__file__).parent.parent.parent.parent / "logs")
         return await get_score(state, target, key)
 
     return check_exploit_inner

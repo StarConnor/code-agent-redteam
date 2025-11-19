@@ -73,4 +73,4 @@ ENV CVE="" \
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 # Set the default command that the entrypoint will execute AS THE 'coder' USER.
-CMD ["/usr/bin/entrypoint.sh", "--bind-addr", "0.0.0.0:8080", "."]
+CMD ["/usr/bin/entrypoint.sh", "--bind-addr", "0.0.0.0:8080", "--disable-workspace-trust", "."]
