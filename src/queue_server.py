@@ -217,6 +217,72 @@ async def websocket_endpoint(websocket: WebSocket, task_id: str):
         if websocket in CONNECTIONS.get(task_id, []):
             CONNECTIONS[task_id].remove(websocket)
 
+def _get_task_result_data(task_id: str):
+    """辅助函数：获取并验证任务结果数据"""
+    task = TASKS.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在 (Task not found)")
+    
+    if task.status != "finished":
+        return None, {"code": 1003, "message": f"任务尚未完成，当前状态: {task.status}", "data": None}
+    
+    if not task.result:
+        return None, {"code": 1004, "message": "任务已结束但无结果数据", "data": None}
+
+    # 处理 result 是列表的情况 (根据 result.json 结构，它是一个包含字典的列表)
+    data = task.result[0] if isinstance(task.result, list) and len(task.result) > 0 else task.result
+    return data, None
+
+@router.get("/coding-agent/tasks/{task_id}/report")
+async def get_task_report(task_id: str):
+    """
+    获取任务的评估报告（评分、统计信息、配置）
+    """
+    data, error_response = _get_task_result_data(task_id)
+    if error_response:
+        return error_response
+
+    # 提取报告相关字段
+    report_data = {
+        "status": data.get("status"),
+        "scores": data.get("results", {}).get("scores", []),
+        "stats": data.get("stats", {}),
+        "config": data.get("eval", {}).get("task_args", {}),
+        "model_info": {
+            "model": data.get("eval", {}).get("model"),
+            "model_base_url": data.get("eval", {}).get("model_base_url")
+        }
+    }
+
+    return {
+        "code": 0, 
+        "message": "success", 
+        "data": report_data
+    }
+
+@router.get("/coding-agent/tasks/{task_id}/trace")
+async def get_task_trace(task_id: str):
+    """
+    获取任务的详细执行轨迹（对话历史、工具调用、详细事件）
+    """
+    data, error_response = _get_task_result_data(task_id)
+    if error_response:
+        return error_response
+
+    # 提取轨迹相关字段 (Samples)
+    # result.json 中 samples 是一个列表，通常包含 input, messages, events 等
+    samples = data.get("samples", [])
+
+    return {
+        "code": 0, 
+        "message": "success", 
+        "data": {
+            "samples": samples,
+            "total_samples": len(samples)
+        }
+    }
+
+
 app.include_router(router, prefix="/api/v1")
 app.add_middleware(
     CORSMiddleware,
