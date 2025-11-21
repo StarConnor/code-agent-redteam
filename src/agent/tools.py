@@ -201,13 +201,15 @@ class UIActionObserver:
                 
                 # Use retry function to click the export button
                 async def click_export():
-                    await self.chat_window_frame.locator(".codicon.codicon-star-empty").hover()
-                    count = await export_button.count()
-                    if count == 0:
+                    star_icon = self.chat_window_frame.locator(".codicon.codicon-star-empty")
+                    star_count = await star_icon.count()
+                    if star_count == 0:
                         raise Exception("Export button not found")
-                    elif count == 1:
+                    elif star_count == 1:
+                        await star_icon.hover()
                         await export_button.click()
                     else: 
+                        await star_icon.nth(0).hover()
                         await export_button.nth(0).click()
                     
                 await retry(click_export, max_attempts=3, delay=1.0, backoff=2.0, 

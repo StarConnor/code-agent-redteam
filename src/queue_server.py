@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ConfigDict
 
 from .redteam_runner import RedTeamRunner
-origins = ["http://localhost:3000", "http://g5.py3.io:3000"]
+origins = ["http://localhost:3000", "http://g5.py3.io:3000", "http://g5.py3.io:3001", "http://localhost:3001", "http://10.214.242.55:3001"]
 
 # --- FastAPI App Setup ---
 app = FastAPI(title="AgentSphere Backend")
@@ -30,8 +30,10 @@ class Task(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     status: str = "pending"
     result: Optional[Any] = None
-    queue: asyncio.Queue
+    task_ix: int = 0
+    queues: Dict[str, asyncio.Queue] = Field(default_factory=dict)
     latest_frame: Optional[str] = None
+    latest_result: Optional[Dict] = Field(default_factory=dict)
 
 TASKS: Dict[str, Task] = {}
 CONNECTIONS: Dict[str, List[WebSocket]] = defaultdict(list)
@@ -43,63 +45,93 @@ executor = ThreadPoolExecutor()
 
 # --- WebSocket and Queue Logic ---
 
+from fastapi.encoders import jsonable_encoder # <--- Import this
+
 async def broadcast_to_task_clients(task_id: str, message: dict):
     """Helper function to send a JSON message to all clients for a specific task."""
-    logger.debug(f"Broadcasting message to clients of task {task_id}, {CONNECTIONS=}: {message['data']['frame'][:30]}")
-    for client in CONNECTIONS.get(task_id, []):
-        try:
-            await client.send_json(message)
-            logger.debug(f"Sent message to client of task {task_id}, {message['data']['frame'][:30]}...")
-        except Exception:
-            pass
+    # logger.debug(...) 
+    
+    # 1. Convert complex types (Pydantic models, datetime, UUID) to standard JSON types
+    safe_message = jsonable_encoder(message)
 
-async def queue_pusher(task_id: str):
-    """
-    Waits for screenshot data to appear in a task's queue, encodes it,
-    and pushes it to all connected WebSocket clients.
-    """
-    print(f"[{task_id}] Queue pusher started.")
+    if task_id not in CONNECTIONS:
+        return
+
+    # Iterate over a copy of the list to avoid modification errors during iteration
+    for client in CONNECTIONS[task_id][:]: 
+        try:
+            await client.send_json(safe_message)
+            # logger.debug(...)
+        except Exception as e:
+            # 2. PRINT THE ERROR. Do not pass silently.
+            logger.error(f"Failed to send message to client {task_id}: {e}")
+            # Optionally remove dead clients
+            if client in CONNECTIONS[task_id]:
+                CONNECTIONS[task_id].remove(client)
+
+async def queue_pusher(task_id: str, queue_name: str):
+    print(f"[{task_id}] {queue_name} queue pusher started.")
     task_info = TASKS.get(task_id)
     if not task_info:
         return
 
-    queue = task_info.queue
+    queue = task_info.queues.get(queue_name)
+    
     while True:
-        logger.debug(f"[{task_id}] Waiting for screenshot from queue...")
-        screenshot_bytes = await queue.get()
-        logger.debug(f"[{task_id}] Received screenshot from queue: {len(screenshot_bytes) if screenshot_bytes else 0} bytes")
+        new_data = await queue.get()
 
-        if screenshot_bytes is None:
+        if new_data is None:
             break # Exit the loop on shutdown signal
 
         try:
-            base64_image = base64.b64encode(screenshot_bytes).decode("utf-8")
-            data_url = f"data:image/png;base64,{base64_image}"
-            TASKS[task_id].latest_frame = data_url  # Store the data URL instead of raw bytes
-            payload = {
-                "code": 0, "message": "success",
-                "data": {
-                    "frame": data_url,
-                    "timestamp": int(time.time() * 1000)
+            payload = None
+            if queue_name == "frame":
+                # ... (Frame processing logic remains the same) ...
+                base64_image = base64.b64encode(new_data).decode("utf-8")
+                data_url = f"data:image/png;base64,{base64_image}"
+                TASKS[task_id].latest_frame = data_url
+                payload = {
+                    "code": 0, "message": "success",
+                    "data": {"frame": data_url, "timestamp": int(time.time() * 1000)}
                 }
-            }
-            await broadcast_to_task_clients(task_id, payload)
+            elif queue_name == "result":
+                # ... (Result processing logic) ...
+                print(f"[{task_id}] Processing Result payload...")
+                new_data = {
+                    "task_id": f"task_{TASKS[task_id].task_ix}",
+                    **new_data
+                }
+                payload = {
+                    "code": 0, "message": "success",
+                    "data": {"result": new_data, "timestamp": int(time.time() * 1000)}
+                }
+                TASKS[task_id].latest_result = payload
+                TASKS[task_id].task_ix += 1
+            
+            if payload:
+                await broadcast_to_task_clients(task_id, payload)
+                
         except Exception as e:
-            print(f"[{task_id}] Failed to process or send screenshot from queue: {e}")
+            # If serialization fails here (before broadcast), catch it
+            logger.error(f"[{task_id}] Queue processing error: {e}")
+            import traceback
+            traceback.print_exc()
     
-    final_payload = {"code": 1002, "message": "任务已完成", "data": None}
-    await broadcast_to_task_clients(task_id, final_payload)
-    print(f"[{task_id}] Queue pusher finished.")
+    # --- CRITICAL CHANGE ---
+    # Only send "Task Finished" if this is the RESULT queue.
+    # If the frame queue finishes, we just stop sending frames, but we wait for the result.
+    if queue_name == "result":
+        print(f"[{task_id}] Result queue finished. Sending Task Complete signal.")
+        final_payload = {"code": 1002, "message": "任务已完成", "data": None}
+        await broadcast_to_task_clients(task_id, final_payload)
+    else:
+        print(f"[{task_id}] Frame queue finished.")
 
 # REVISED WORKER FUNCTION
-def run_redteam_task_in_thread(task_id: str, runner: RedTeamRunner):
-    """
-    This is the blocking function that will run in a separate thread.
-    It's no longer an async function.
-    """
+# Update signature to accept 'main_loop'
+def run_redteam_task_in_thread(task_id: str, runner: RedTeamRunner, main_loop: asyncio.AbstractEventLoop):
     try:
         TASKS[task_id].status = "running"
-        # This is a blocking call, which is fine because it's in its own thread.
         results = runner.run()
         TASKS[task_id].status = "finished"
         TASKS[task_id].result = results
@@ -107,14 +139,18 @@ def run_redteam_task_in_thread(task_id: str, runner: RedTeamRunner):
         print(f"[{task_id}] Task encountered an error: {e}")
         TASKS[task_id].status = "error"
     finally:
-        # CRITICAL: Put the shutdown signal in the queue so the pusher can terminate.
-        # Since this is a standard thread, we need to get the asyncio event loop
-        # to safely put an item in the queue.
-        loop = asyncio.get_running_loop()
-        loop.call_soon_threadsafe(TASKS[task_id].queue.put_nowait, None)
+        # CRITICAL FIX: Use the passed 'main_loop'
+        # Do NOT call asyncio.get_running_loop() here.
+        print(f"[{task_id}] Thread cleanup. Sending shutdown signals to queues.")
+        if task_id in TASKS and TASKS[task_id].queues:
+            for q_name, queue in TASKS[task_id].queues.items():
+                try:
+                    # Safely tell the main loop to put None in the queue
+                    main_loop.call_soon_threadsafe(queue.put_nowait, None)
+                except Exception as e:
+                    print(f"[{task_id}] Error closing queue {q_name}: {e}")
 
 # --- API Endpoints ---
-
 @router.post("/coding-agent/tasks", status_code=200)
 async def start_evaluation_task(
     background_tasks: BackgroundTasks,
@@ -124,7 +160,10 @@ async def start_evaluation_task(
     agent_extension: Optional[UploadFile] = File(None),
 ):
     try:
-        task_queue = asyncio.Queue()
+        main_loop = asyncio.get_running_loop()
+        frame_queue = asyncio.Queue()
+        result_queue = asyncio.Queue()
+        queues = {"frame": frame_queue, "result": result_queue}
         task_id = f"task-{int(time.time())}-{uuid.uuid4().hex[:8]}"
         
         agent_extension_path = None
@@ -139,18 +178,23 @@ async def start_evaluation_task(
             attack_method_name=attack_method_name,
             agent_extension=str(agent_extension_path) if agent_extension_path else None,
             mcp_server_config=mcp_config_dict,
-            queue=task_queue,
+            queues=queues,
+            loop=main_loop,
         )
 
-        TASKS[task_id] = Task(queue=task_queue)
+        TASKS[task_id] = Task(queues=queues)
         
         # Schedule the async queue pusher to run on the main event loop
-        background_tasks.add_task(queue_pusher, task_id)
+        asyncio.create_task(queue_pusher(task_id, "frame"))
+        asyncio.create_task(queue_pusher(task_id, "result"))
         
         # Run the blocking task in a separate thread without awaiting it here
-        loop = asyncio.get_running_loop()
-        loop.run_in_executor(
-            executor, run_redteam_task_in_thread, task_id, runner
+        main_loop.run_in_executor(
+            executor, 
+            run_redteam_task_in_thread, 
+            task_id, 
+            runner, 
+            main_loop # <--- PASSED HERE
         )
         
         return {"code": 0, "message": "任务启动成功", "data": {"task_id": task_id, "frame_endpoint": f"/api/v1/coding-agent/tasks/{task_id}/frame"}}
@@ -272,6 +316,10 @@ async def get_task_trace(task_id: str):
     # 提取轨迹相关字段 (Samples)
     # result.json 中 samples 是一个列表，通常包含 input, messages, events 等
     samples = data.get("samples", [])
+    task_id = 0
+    for sample in samples:
+        sample['task_id'] = f"task_{task_id}"
+        task_id += 1
 
     return {
         "code": 0, 

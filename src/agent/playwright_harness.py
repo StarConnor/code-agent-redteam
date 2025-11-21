@@ -50,6 +50,7 @@ def playwright_harness(
     code_server_env: DockerExecutionEnvironment,
     manager: EnvironmentManager,
     config_path: str,
+    password: str,
     preparation_info: PreparationInfo,
     max_turns: int = 15,
     check_fn_every_turn: callable = _call_check_fn,
@@ -66,6 +67,7 @@ def playwright_harness(
             page=page,
             code_server_env=code_server_env,
             config_path=config_path,
+            password=password,
             preparation_info=preparation_info
         )
         LOGGER.info("✅ UI setup complete. Starting evaluation logic.")
@@ -126,6 +128,7 @@ def playwright_harness(
             history_file = await observer.get_conversation_history()
         except Exception as e:
             LOGGER.warning(f"HARNESS: Error getting conversation history: {e}")
+            history_file = None
             # pdb.set_trace()
         conversation_history = manager.code_server.get_file(history_file)
         state.messages = get_conversation_format(conversation_history)

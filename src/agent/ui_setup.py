@@ -74,7 +74,8 @@ async def pre_vscode_setup(
     page: Page,
     code_server_env: DockerExecutionEnvironment,
     config_path: str,
-    preparation_info: PreparationInfo
+    preparation_info: PreparationInfo,
+    password: str = None
 ):
     """
     Main entry point for UI setup inside the browser.
@@ -82,16 +83,31 @@ async def pre_vscode_setup(
     """
     extension_info = preparation_info.extension_info
     
-    LOGGER.info(f"Installing extension from: {extension_info.installation_file}")
-    cmd = [
-        "bash", "-lc",
-        f'su - coder -c "code-server --install-extension {extension_info.installation_file}"'
+    LOGGER.warning(f"Installing extension from: {extension_info.installation_file}")
+
+    # 1. Force ownership of the vsix file to 'coder' so it can be read
+    # (This runs as root because the docker exec session defaults to root)
+    code_server_env.container.exec_run(["chown", "coder:coder", preparation_info.extension_info.installation_file])
+
+    # 2. Install using gosu
+    # We use --force to overwrite if it exists, and --extensions-dir if you need a custom location (optional)
+    install_cmd = [
+        "gosu", 
+        "coder", 
+        "code-server", 
+        "--install-extension", 
+        preparation_info.extension_info.installation_file,
+        "--force"
     ]
+    
+    exit_code, output = code_server_env.container.exec_run(cmd=install_cmd)
+    
+    if exit_code != 0:
+        LOGGER.error(f"Extension install failed: {output.decode('utf-8')}")
+    else:
+        LOGGER.info("Extension installed successfully.")
     # Note: exec_run is synchronous, so we run it in an executor
     # to avoid blocking the async event loop.
-    exit_code, output = code_server_env.container.exec_run(cmd=cmd)
-    if exit_code != 0:
-        raise RuntimeError(f"Failed to install extension: {output.decode()}")
     LOGGER.info("Extension installed successfully via exec_run.")
     
     # It's good practice to handle login idempotently

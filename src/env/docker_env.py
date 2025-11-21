@@ -10,7 +10,7 @@ from .base import BaseExecutionEnvironment
 
 import docker
 DOCKER_AVAILABLE = True
-from ..utils.others import setup_logging, retry_sync
+from ..utils.others import setup_logging, retry_sync, find_available_port
 LOGGER = setup_logging(__name__)
 
 class DockerExecutionEnvironment(BaseExecutionEnvironment):
@@ -26,7 +26,6 @@ class DockerExecutionEnvironment(BaseExecutionEnvironment):
         ports: Optional[Dict[str, int]] = None,
         auto_remove: bool = True,
         detach: bool = True,
-        auto_assign_ports: bool = True,
         mounts = None,
         commands: Union[str, List[str]] = [],
         **kwargs
@@ -53,18 +52,11 @@ class DockerExecutionEnvironment(BaseExecutionEnvironment):
         self.environment_vars = environment_vars or {}
         self.auto_remove = auto_remove
         self.detach = detach
-        self.auto_assign_ports = auto_assign_ports
         self.mounts = mounts or []
         self.commands = commands
 
         # Handle port assignment
-        if ports is None and auto_assign_ports:
-            # Automatically assign an available port for the default API port
-            available_port = find_available_port()
-            self.ports = {'8000/tcp': available_port}
-            LOGGER.info(f"Auto-assigned port {available_port} for container port 8000")
-        else:
-            self.ports = ports or {}
+        self.ports = ports or {}
 
         # Docker client
         if docker is None:
@@ -96,6 +88,9 @@ class DockerExecutionEnvironment(BaseExecutionEnvironment):
             except Exception:  # Network not found
                 LOGGER.info(f"Creating network {self.network}...")
                 self.client.networks.create(self.network)
+            
+            for internal_port, external_port in self.ports.items():
+                self.ports[internal_port] = find_available_port(external_port)
 
             # Run container
             self.container = self.client.containers.run(
@@ -363,27 +358,3 @@ class DockerExecutionEnvironment(BaseExecutionEnvironment):
         except Exception as e:
             LOGGER.error(f"Failed to retrieve file '{file_path}' from container: {e}")
             raise RuntimeError(f"Failed to retrieve file '{file_path}' from container: {e}")
-
-def find_available_port(start_port: int = 8000, max_attempts: int = 100) -> int:
-    """
-    Find an available port starting from the given port.
-    
-    Args:
-        start_port: Starting port number to check
-        max_attempts: Maximum number of ports to try
-        
-    Returns:
-        An available port number
-        
-    Raises:
-        RuntimeError: If no available port is found within max_attempts
-    """
-    for port in range(start_port, start_port + max_attempts):
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.bind(('', port))
-                return port
-        except OSError:
-            continue
-    raise RuntimeError(f"Could not find available port in range {start_port}-{start_port + max_attempts}")
-    

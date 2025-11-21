@@ -4,6 +4,43 @@ from typing import Callable, Awaitable, Any, Optional
 from datetime import datetime
 import os
 import time
+import socket
+import docker, io, tarfile, os
+
+def docker_cp_to_container(src_path, dst_path, container_name="my-code-server-redteam", container=None):
+    client = docker.from_env()
+    if container is None:
+        container = client.containers.get(container_name)
+
+    src_path = os.path.abspath(src_path)
+    base_name = os.path.basename(src_path.rstrip("/"))
+
+    # 2. Create tar archive
+    tarstream = io.BytesIO()
+    with tarfile.open(fileobj=tarstream, mode='w') as tar:
+        tar.add(src_path, arcname=base_name)
+
+    tarstream.seek(0)
+
+    # 3. Upload
+    container.put_archive(dst_path, tarstream.read())
+
+
+def is_port_in_use(port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind(('localhost', port))
+            return False
+        except:
+            return True
+
+def find_available_port(start_port: int = 8000, max_attempts: int = 100) -> int:
+    attempts = 0
+    while attempts < max_attempts:
+        port = start_port + attempts
+        if not is_port_in_use(port):
+            return port
+        attempts += 1
 
 def setup_logging(name: str):
     # Create logs directory if it doesn't exist

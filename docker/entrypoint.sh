@@ -30,11 +30,10 @@ update-ca-certificates
 # This fixes the EACCES error.
 echo "[Entrypoint] Fixing permissions for /home/coder..."
 
-find /home/coder \
-  -path /home/coder/.config -prune \
-  -o -exec chown coder:coder {} +
+# mkdir -p /home/coder/project
+chown -R coder:coder /home/coder
+# cd /home/coder/project
 
 # 4. Drop privileges and execute
 echo "[Entrypoint] Dropping root privileges and starting application as 'coder'..."
-cd /home/coder/project
 exec gosu coder "$@"

@@ -16,6 +16,7 @@ from .scorer import check_exploit
 # Your custom framework components
 # from ...agent.playwright_harness import playwright_harness
 from ...agent.screenshot_solver import auto_screenshot_solver
+from ...agent.scorer_wrapper import wrap_scorer_with_reporting
 from ...agent.ui_config import PreparationInfo, AgentInfo, ExtensionInfo
 from ...environment_manager import EnvironmentManager, EnvironmentState
 
@@ -64,7 +65,8 @@ def redcode_task(
     model_args: dict = {},
     api_key: str = os.environ.get("OPENAI_API_KEY", "your-openai-api-key"),
     mcp_server_config: Dict[str, Any] = None,
-    queue: asyncio.Queue = None,
+    queues: Dict[str, asyncio.Queue] = None,
+    loop: asyncio.AbstractEventLoop = None,
 ) -> Task:
     """
     Defines the full red teaming evaluation task for a VS Code coding agent,
@@ -92,7 +94,7 @@ def redcode_task(
         extension_info=ExtensionInfo(
             name="Cline",  # The display name of the extension for UI interaction
             id="saoudrizwan.claude-dev",  # The official extension ID
-            installation_file=extension_path
+            installation_file="/home/coder/cline-3.35.0.vsix"  # The path inside the container
         ),
         agent_info=AgentInfo(
             api_provider=model_args.get("api_provider", "OpenAI Compatible"),
@@ -109,6 +111,16 @@ def redcode_task(
     languange = filter_dict.get("language", None)
     solver = playwright_harness
 
+    frame_queue = queues.get("frame", None)
+    result_queue = queues.get("result", None)
+
+    base_scorer = check_exploit(key=STORE_KEY_ATTACK_SUCCESSFUL)
+
+    # Wrap the scorer if we have a result queue and loop
+    final_scorer = base_scorer
+    if result_queue and loop:
+        final_scorer = wrap_scorer_with_reporting(base_scorer, result_queue, loop)
+
     return Task(
         # Dataset: Uses the cve-bench loader to find and parse challenges.
         dataset=get_dataset(
@@ -124,16 +136,16 @@ def redcode_task(
             workspace_path=workspace,
             preparation_info=preparation_info,
             config_path=config,
+            extension_path=extension_path,
             headless=headless,
             max_turns=max_turns,
-            queue=queue,
+            frame_queue=frame_queue,
+            main_loop=loop
         ),
 
         # Scorer: Reuses the cve-bench scorer to check if the exploit was successful.
-        scorer=check_exploit(
-            key=STORE_KEY_ATTACK_SUCCESSFUL,
-        ),
+        scorer=final_scorer,
 
         # Environment Hooks: Manages the lifecycle of the Docker containers.
-        cleanup=cleanup_environment,
+        # cleanup=cleanup_environment,
     )
